@@ -1,0 +1,116 @@
+<?php
+
+declare(strict_types=1);
+
+use Fisharebest\Webtrees\Auth;
+use Fisharebest\Webtrees\DB;
+use Fisharebest\Webtrees\Fact;
+use Fisharebest\Webtrees\Family;
+use Fisharebest\Webtrees\I18N;
+use Illuminate\Support\Collection;
+
+/**
+ * Based on webtrees 2.2.6 resources/views/family-page.phtml.
+ * Adds unobtrusive Family Contributions actions while leaving normal
+ * webtrees family/fact rendering intact.
+ *
+ * @var bool                 $can_upload_media
+ * @var Collection<int,Fact> $clipboard_facts
+ * @var Collection<int,Fact> $facts
+ * @var Family               $record
+ */
+
+$tree = $record->tree();
+$module_name = '_potts_family_contributions_';
+
+$allow_guests = DB::table('module_setting')
+    ->where('module_name', '=', $module_name)
+    ->where('setting_name', '=', 'allow_guests')
+    ->value('setting_value') ?? '1';
+
+$can_contribute = Auth::check() || $allow_guests === '1';
+$contribute_url = '';
+if ($can_contribute) {
+    try {
+        $contribute_url = route($module_name . '-route', ['tree' => $tree->name()])
+            . '?family=1&family_xref=' . rawurlencode($record->xref());
+    } catch (\Throwable) {
+        $contribute_url = '';
+    }
+}
+?>
+
+<?= view('family-page-pending', ['record' => $record]) ?>
+
+<div class="d-flex mb-3">
+    <h2 class="wt-page-title mx-auto">
+        <?= $record->fullName() ?>
+    </h2>
+    <?php if ($record->canEdit()) : ?>
+        <?= view('family-page-menu', ['can_upload_media' => $can_upload_media, 'clipboard_facts' => $clipboard_facts, 'record' => $record]) ?>
+    <?php endif ?>
+</div>
+
+<?php if ($contribute_url !== '') : ?>
+    <div class="text-center mb-4">
+        <a class="btn btn-sm btn-outline-primary" href="<?= e($contribute_url) ?>" rel="nofollow">
+            <?= I18N::translate('Contribute information about this family') ?>
+        </a>
+    </div>
+<?php endif ?>
+
+<div class="wt-page-content">
+    <div class="wt-family-members d-flex">
+        <?= view('family-page-children', ['family' => $record]) ?>
+        <?= view('family-page-parents', ['family' => $record]) ?>
+    </div>
+
+    <h3 class="mt-4"><?= I18N::translate('Facts and events') ?></h3>
+    <table class="table wt-facts-table">
+        <?php if ($facts->isEmpty()) : ?>
+            <tr>
+                <td colspan="2">
+                    <?= I18N::translate('No facts exist for this family.') ?>
+                </td>
+            </tr>
+        <?php else : ?>
+            <?php foreach ($facts as $fact) : ?>
+                <?php
+                $fact_html = view('fact', ['fact' => $fact, 'record' => $record]);
+                $fact_id = (string) $fact->id();
+                $tag = (string) $fact->tag();
+                $supported = $can_contribute
+                    && $fact_id !== ''
+                    && !in_array($tag, ['FAM:CHAN', 'FAM:_UID', 'FAM:UID', 'FAM:SUBM'], true);
+
+                if ($supported) {
+                    try {
+                        $suggest_url = route($module_name . '-route', ['tree' => $tree->name()])
+                            . '?family=1&family_xref=' . rawurlencode($record->xref())
+                            . '&fact_id=' . rawurlencode($fact_id);
+
+                        $action = '<div class="pfc-suggest-inline text-end mt-2">'
+                            . '<a class="small text-muted text-decoration-none" href="' . e($suggest_url) . '" rel="nofollow"'
+                            . ' title="' . e(I18N::translate('Suggest a correction to this family fact')) . '">'
+                            . I18N::translate('Suggest correction')
+                            . '</a></div>';
+
+                        $last_td = strrpos($fact_html, '</td>');
+                        if ($last_td !== false) {
+                            $fact_html = substr($fact_html, 0, $last_td) . $action . substr($fact_html, $last_td);
+                        }
+                    } catch (\Throwable) {
+                    }
+                }
+                ?>
+                <?= $fact_html ?>
+            <?php endforeach ?>
+        <?php endif ?>
+
+        <?php if ($record->canEdit()) : ?>
+            <?= view('fact-add-new', ['record' => $record]) ?>
+        <?php endif ?>
+    </table>
+</div>
+
+<?= view('modals/ajax') ?>
