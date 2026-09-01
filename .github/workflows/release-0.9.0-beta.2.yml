@@ -1,0 +1,52 @@
+name: Release 0.9.0-beta.2
+
+on:
+  push:
+    paths:
+      - '.release-0.9.0-beta.2'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Verify release version
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -F "private const VERSION = '0.9.0-beta.2';" module.php
+          test "$(tr -d '\r\n' < latest-version.txt)" = "0.9.0-beta.2"
+
+      - name: Build installable archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf build
+          mkdir -p build/potts_family_contributions
+          cp module.php README.md CHANGELOG.md latest-version.txt build/potts_family_contributions/
+          cp -R resources build/potts_family_contributions/
+          if [ -f LICENSE ]; then cp LICENSE build/potts_family_contributions/; fi
+          cd build
+          zip -r ../potts_family_contributions-0.9.0-beta.2.zip potts_family_contributions
+          cd ..
+          sha256sum potts_family_contributions-0.9.0-beta.2.zip > potts_family_contributions-0.9.0-beta.2-SHA256SUMS.txt
+
+      - name: Publish GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create v0.9.0-beta.2 \
+            potts_family_contributions-0.9.0-beta.2.zip \
+            potts_family_contributions-0.9.0-beta.2-SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Potts Family Contributions 0.9.0-beta.2" \
+            --notes-file RELEASE_NOTES_0.9.0-beta.2.md \
+            --prerelease
