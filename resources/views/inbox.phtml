@@ -1,0 +1,164 @@
+<?php
+/** @var string $title */
+/** @var \Fisharebest\Webtrees\Tree $tree */
+/** @var array<int,array<string,mixed>> $rows */
+/** @var array<string,string> $statuses */
+/** @var array<string,int> $counts */
+/** @var string $status */
+/** @var string $base_url */
+/** @var string $post_url */
+/** @var bool $table_ready */
+
+$total_count = array_sum($counts);
+$status_badges = [
+    'new'       => 'bg-primary',
+    'review'    => 'bg-warning text-dark',
+    'completed' => 'bg-success',
+    'rejected'  => 'bg-secondary',
+];
+$target_badges = [
+    'Person' => 'bg-light text-dark border',
+    'Family' => 'bg-light text-dark border',
+    'Media'  => 'bg-light text-dark border',
+];
+?>
+
+<div class="container-xl py-3 potts-family-contributions-inbox">
+    <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-3">
+        <div>
+            <h2 class="mb-1"><?= e($title) ?></h2>
+            <p class="text-muted mb-0">Review contributions submitted for <?= e($tree->title()) ?>. Nothing here changes the GEDCOM automatically.</p>
+        </div>
+    </div>
+
+    <?php if (!$table_ready) : ?>
+        <div class="alert alert-danger">The Family Contributions database table is unavailable. Check database permissions before accepting submissions.</div>
+    <?php endif ?>
+
+    <div class="d-flex gap-2 flex-wrap mb-4" aria-label="Contribution status filters">
+        <a class="btn <?= $status === '' ? 'btn-primary' : 'btn-outline-primary' ?>" href="<?= e($base_url . '?manage=1') ?>">
+            All <span class="badge bg-secondary ms-1"><?= e((string) $total_count) ?></span>
+        </a>
+        <?php foreach ($statuses as $value => $label) : ?>
+            <a class="btn <?= $status === $value ? 'btn-primary' : 'btn-outline-primary' ?>" href="<?= e($base_url . '?manage=1&status=' . rawurlencode($value)) ?>">
+                <?= e($label) ?> <span class="badge bg-secondary ms-1"><?= e((string) ($counts[$value] ?? 0)) ?></span>
+            </a>
+        <?php endforeach ?>
+    </div>
+
+    <?php if ($rows === []) : ?>
+        <div class="alert alert-info">No contributions match this view.</div>
+    <?php endif ?>
+
+    <?php foreach ($rows as $row) : ?>
+        <?php
+        $row_status = (string) ($row['status'] ?? 'new');
+        $status_label = $statuses[$row_status] ?? ucfirst($row_status);
+        $target_label = (string) ($row['target_label'] ?? 'Person');
+        ?>
+        <article class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-start gap-3 flex-wrap">
+                <div>
+                    <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
+                        <strong>#<?= e((string) $row['id']) ?> — <?= e((string) $row['record_name']) ?></strong>
+                        <span class="badge <?= e($target_badges[$target_label] ?? 'bg-light text-dark border') ?>"><?= e($target_label) ?></span>
+                        <span class="badge <?= e($status_badges[$row_status] ?? 'bg-secondary') ?>"><?= e($status_label) ?></span>
+                    </div>
+                    <div class="small text-muted">
+                        <?= e((string) $row['category_label']) ?> · submitted <?= e((string) $row['created_at']) ?> · record <?= e((string) $row['xref']) ?>
+                    </div>
+                </div>
+                <a class="btn btn-sm btn-outline-secondary" href="<?= e((string) $row['record_url']) ?>">Open <?= e(strtolower($target_label)) ?></a>
+            </div>
+
+            <div class="card-body">
+                <dl class="row mb-3">
+                    <dt class="col-sm-3">Contributor</dt>
+                    <dd class="col-sm-9"><?= e((string) $row['contributor_name']) ?> — <a href="mailto:<?= e((string) $row['contributor_email']) ?>"><?= e((string) $row['contributor_email']) ?></a></dd>
+
+                    <dt class="col-sm-3">Connection</dt>
+                    <dd class="col-sm-9"><?= e((string) ($row['relationship'] !== '' ? $row['relationship'] : 'Not supplied')) ?></dd>
+
+                    <dt class="col-sm-3">Permission to contact</dt>
+                    <dd class="col-sm-9 mb-0"><?= !empty($row['contact_ok']) ? 'Yes' : 'No' ?></dd>
+                </dl>
+
+                <?php if ((string) ($row['fact_summary'] ?? '') !== '') : ?>
+                    <div class="card border-info mb-3">
+                        <div class="card-header py-2"><strong>Fact or event being questioned</strong></div>
+                        <div class="card-body py-2">
+                            <div><strong><?= e((string) ($row['fact_label'] ?? 'Fact or event')) ?></strong></div>
+                            <div><?= e((string) $row['fact_summary']) ?></div>
+                            <?php if ((string) ($row['fact_record_xref'] ?? '') !== '') : ?>
+                                <div class="small text-muted mt-1">
+                                    Stored on <?= (string) ($row['fact_record_type'] ?? '') === 'FAM' ? 'family' : 'individual' ?> record <?= e((string) $row['fact_record_xref']) ?>
+                                </div>
+                            <?php endif ?>
+                            <?php if ((string) ($row['fact_snapshot'] ?? '') !== '') : ?>
+                                <details class="mt-2">
+                                    <summary class="small text-muted">Show original GEDCOM snapshot</summary>
+                                    <pre class="border rounded bg-light p-2 mt-2 mb-0 small" style="white-space:pre-wrap"><?= e((string) $row['fact_snapshot']) ?></pre>
+                                </details>
+                            <?php endif ?>
+                        </div>
+                    </div>
+                <?php endif ?>
+
+                <h3 class="h6">Contribution</h3>
+                <div class="border rounded p-3 bg-light mb-3" style="white-space:pre-wrap"><?= e((string) $row['message']) ?></div>
+
+                <?php if ((string) $row['evidence'] !== '') : ?>
+                    <h3 class="h6">Source or evidence</h3>
+                    <div class="border rounded p-3 mb-3" style="white-space:pre-wrap"><?= e((string) $row['evidence']) ?></div>
+                <?php endif ?>
+
+                <?php $attachment = isset($row['attachment']) && is_array($row['attachment']) ? $row['attachment'] : null; ?>
+                <?php if ($attachment !== null) : ?>
+                    <div class="card border-info mb-3">
+                        <div class="card-body d-flex justify-content-between align-items-center gap-3 flex-wrap py-2">
+                            <div>
+                                <strong>Attachment:</strong> <?= e((string) $attachment['original_name']) ?>
+                                <div class="small text-muted"><?= e((string) $attachment['mime_type']) ?> · <?= e((string) $attachment['file_size_text']) ?></div>
+                            </div>
+                            <a class="btn btn-sm btn-outline-primary" href="<?= e((string) $attachment['url']) ?>">Download attachment</a>
+                        </div>
+                    </div>
+                <?php endif ?>
+
+                <form method="post" action="<?= e($post_url) ?>" class="mb-3">
+                    <?php if (function_exists('csrf_field')) : ?>
+                        <?= csrf_field() ?>
+                    <?php endif ?>
+                    <input type="hidden" name="action" value="update">
+                    <input type="hidden" name="contribution_id" value="<?= e((string) $row['id']) ?>">
+
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label" for="pfc-status-<?= e((string) $row['id']) ?>">Review status</label>
+                            <select class="form-select" id="pfc-status-<?= e((string) $row['id']) ?>" name="status">
+                                <?php foreach ($statuses as $value => $label) : ?>
+                                    <option value="<?= e($value) ?>" <?= $row_status === $value ? 'selected' : '' ?>><?= e($label) ?></option>
+                                <?php endforeach ?>
+                            </select>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label" for="pfc-notes-<?= e((string) $row['id']) ?>">Review notes <span class="text-muted">(private)</span></label>
+                            <textarea class="form-control" id="pfc-notes-<?= e((string) $row['id']) ?>" name="admin_notes" rows="3" maxlength="10000" placeholder="Record what was checked, changed or still needs follow-up."><?= e((string) $row['admin_notes']) ?></textarea>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-primary mt-3" type="submit">Save review</button>
+                </form>
+
+                <form method="post" action="<?= e($post_url) ?>" onsubmit="return confirm('Delete this contribution permanently? Its attachment will also be deleted.');">
+                    <?php if (function_exists('csrf_field')) : ?>
+                        <?= csrf_field() ?>
+                    <?php endif ?>
+                    <input type="hidden" name="action" value="delete">
+                    <input type="hidden" name="contribution_id" value="<?= e((string) $row['id']) ?>">
+                    <button class="btn btn-sm btn-outline-danger" type="submit">Delete contribution</button>
+                </form>
+            </div>
+        </article>
+    <?php endforeach ?>
+</div>
