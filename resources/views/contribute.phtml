@@ -1,0 +1,140 @@
+<?php
+/** @var \Fisharebest\Webtrees\Individual $individual */
+/** @var \Fisharebest\Webtrees\Tree $tree */
+/** @var string $action_url */
+/** @var array<string,string> $categories */
+/** @var string $contributor_name */
+/** @var string $contributor_email */
+/** @var bool $is_logged_in */
+/** @var bool $allow_attachments */
+/** @var int $max_upload_mb */
+/** @var array<int,array{key:string,id:string,record_xref:string,record_type:string,label:string,summary:string}> $facts */
+/** @var array{id:string,record_xref:string,record_type:string,tag:string,label:string,summary:string,gedcom:string}|null $selected_fact */
+/** @var bool $standalone */
+
+$person_name = trim(html_entity_decode(strip_tags($individual->fullName()), ENT_QUOTES, 'UTF-8'));
+$facts = isset($facts) && is_array($facts) ? $facts : [];
+$selected_fact = isset($selected_fact) && is_array($selected_fact) ? $selected_fact : null;
+$standalone = !empty($standalone);
+?>
+
+<div class="<?= $standalone ? 'container-xl py-3 ' : '' ?>potts-family-contributions">
+    <div class="card mb-3">
+        <div class="card-body">
+            <h2 class="<?= $standalone ? 'h3' : 'h5' ?> mb-2">
+                <?= $selected_fact !== null ? 'Suggest a correction about ' : 'Contribute information about ' ?><?= e($person_name) ?>
+            </h2>
+            <?php if ($selected_fact !== null) : ?>
+                <p class="text-muted mb-3">You are commenting on this specific fact or event:</p>
+                <div class="alert alert-info mb-0">
+                    <strong><?= e((string) $selected_fact['label']) ?></strong><br>
+                    <?= e((string) $selected_fact['summary']) ?>
+                </div>
+            <?php else : ?>
+                <p class="text-muted mb-0">Have you spotted an error, found a record or photograph, or know a family story? Send the details here for the family tree manager to review.</p>
+            <?php endif ?>
+        </div>
+    </div>
+
+    <form method="post" action="<?= e($action_url) ?>" <?= $allow_attachments ? 'enctype="multipart/form-data"' : '' ?>>
+        <?php if (function_exists('csrf_field')) : ?>
+            <?= csrf_field() ?>
+        <?php endif ?>
+        <input type="hidden" name="action" value="submit">
+        <input type="hidden" name="person_xref" value="<?= e($individual->xref()) ?>">
+
+        <?php if ($selected_fact !== null) : ?>
+            <input type="hidden" name="fact_id" value="<?= e((string) $selected_fact['id']) ?>">
+            <input type="hidden" name="fact_record_xref" value="<?= e((string) $selected_fact['record_xref']) ?>">
+        <?php elseif ($facts !== []) : ?>
+            <div class="mb-3">
+                <label class="form-label" for="pfc-fact">Is your contribution about a specific fact or event? <span class="text-muted">(optional)</span></label>
+                <select class="form-select" id="pfc-fact" name="fact_key">
+                    <option value="">No — this is a general contribution about this person</option>
+                    <?php foreach ($facts as $fact) : ?>
+                        <option value="<?= e((string) $fact['key']) ?>"><?= e((string) $fact['summary']) ?></option>
+                    <?php endforeach ?>
+                </select>
+                <div class="form-text">Selecting a fact records a snapshot of its current details so the manager can see exactly what you were commenting on.</div>
+            </div>
+        <?php endif ?>
+
+        <div class="mb-3">
+            <label class="form-label" for="pfc-category">What would you like to contribute?</label>
+            <select class="form-select" id="pfc-category" name="category" required>
+                <?php foreach ($categories as $value => $label) : ?>
+                    <option value="<?= e($value) ?>" <?= $selected_fact !== null && $value === 'correction' ? 'selected' : '' ?>><?= e($label) ?></option>
+                <?php endforeach ?>
+            </select>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label" for="pfc-message"><?= $selected_fact !== null ? 'What should be corrected?' : 'Your contribution' ?></label>
+            <textarea class="form-control" id="pfc-message" name="message" rows="6" maxlength="10000" required placeholder="<?= $selected_fact !== null ? 'Tell us what is incorrect and what you believe the correct information should be.' : 'Tell us what you know, what you think should be corrected, or what you have found.' ?>"></textarea>
+            <div class="form-text">Please include enough detail for the family tree manager to understand what should be checked or added.</div>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label" for="pfc-evidence">Source or evidence <span class="text-muted">(optional)</span></label>
+            <textarea class="form-control" id="pfc-evidence" name="evidence" rows="3" maxlength="5000" placeholder="For example: Victorian birth certificate, newspaper article, family Bible, URL or archive reference"></textarea>
+        </div>
+
+        <?php if ($allow_attachments) : ?>
+            <div class="mb-3">
+                <label class="form-label" for="pfc-attachment">Attach a document or photograph <span class="text-muted">(optional)</span></label>
+                <input class="form-control" id="pfc-attachment" name="attachment" type="file" accept="application/pdf,image/jpeg,image/png,image/webp">
+                <div class="form-text">PDF, JPG, PNG or WEBP, up to <?= e((string) $max_upload_mb) ?> MB. The file is held privately with your contribution until it is reviewed.</div>
+            </div>
+        <?php endif ?>
+
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label class="form-label" for="pfc-name">Your name</label>
+                <input class="form-control" id="pfc-name" name="contributor_name" maxlength="255" value="<?= e($contributor_name) ?>" required>
+            </div>
+            <div class="col-md-6 mb-3">
+                <label class="form-label" for="pfc-email">Your email</label>
+                <input class="form-control" id="pfc-email" name="contributor_email" type="email" maxlength="255" value="<?= e($contributor_email) ?>" required>
+            </div>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label" for="pfc-relationship">How are you connected to this person? <span class="text-muted">(optional)</span></label>
+            <input class="form-control" id="pfc-relationship" name="relationship" maxlength="255" placeholder="For example: great-granddaughter, cousin, local historian">
+        </div>
+
+        <div class="form-check mb-3">
+            <input class="form-check-input" type="checkbox" id="pfc-contact" name="contact_ok" value="1" checked>
+            <label class="form-check-label" for="pfc-contact">The family tree manager may contact me about this contribution.</label>
+        </div>
+
+        <div class="d-none" aria-hidden="true">
+            <label for="pfc-website">Website</label>
+            <input id="pfc-website" name="website" tabindex="-1" autocomplete="off">
+        </div>
+
+        <div class="alert alert-light border small">
+            Nothing is added to the family tree automatically. Your contribution and any attachment will be reviewed before any genealogy record is changed.
+        </div>
+
+        <div class="d-flex gap-2 flex-wrap">
+            <button class="btn btn-primary" type="submit"><?= $selected_fact !== null ? 'Send correction suggestion' : 'Send contribution' ?></button>
+            <?php if ($standalone) : ?>
+                <a class="btn btn-outline-secondary" href="<?= e($individual->url()) ?>">Back to <?= e($person_name) ?></a>
+            <?php endif ?>
+        </div>
+    </form>
+</div>
+
+<?php if ($selected_fact === null && $facts !== []) : ?>
+<script>
+(function () {
+    const fact = document.getElementById('pfc-fact');
+    const category = document.getElementById('pfc-category');
+    if (!fact || !category) return;
+    fact.addEventListener('change', function () {
+        if (fact.value !== '') category.value = 'correction';
+    });
+})();
+</script>
+<?php endif ?>
