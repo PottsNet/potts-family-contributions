@@ -1,0 +1,84 @@
+<?php
+
+declare(strict_types=1);
+
+use Fisharebest\Webtrees\Auth;
+use Fisharebest\Webtrees\DB;
+use Fisharebest\Webtrees\Fact;
+use Fisharebest\Webtrees\Family;
+use Fisharebest\Webtrees\I18N;
+use Fisharebest\Webtrees\Individual;
+use Fisharebest\Webtrees\Location;
+use Fisharebest\Webtrees\Media;
+use Fisharebest\Webtrees\Note;
+use Fisharebest\Webtrees\Source;
+use Fisharebest\Webtrees\Tree;
+use Illuminate\Support\Collection;
+
+/**
+ * Based on webtrees 2.2.6 resources/views/media-page.phtml.
+ * Adds an identification/contribution action for photographs, documents and media.
+ *
+ * @var Collection<int,Fact>       $clipboard_facts
+ * @var Collection<int,Family>     $linked_families
+ * @var Collection<int,Individual> $linked_individuals
+ * @var Collection<int,Location>   $linked_locations
+ * @var Collection<int,Note>       $linked_notes
+ * @var Collection<int,Source>     $linked_sources
+ * @var Media                      $record
+ * @var Tree                       $tree
+ */
+
+$module_name = '_potts_family_contributions_';
+$allow_guests = DB::table('module_setting')
+    ->where('module_name', '=', $module_name)
+    ->where('setting_name', '=', 'allow_guests')
+    ->value('setting_value') ?? '1';
+
+$can_contribute = Auth::check() || $allow_guests === '1';
+$contribute_url = '';
+if ($can_contribute) {
+    try {
+        $contribute_url = route($module_name . '-route', ['tree' => $tree->name()])
+            . '?media=1&media_xref=' . rawurlencode($record->xref());
+    } catch (\Throwable) {
+        $contribute_url = '';
+    }
+}
+?>
+
+<?= view('media-page-pending', ['record' => $record]) ?>
+
+<div class="d-flex mb-3">
+    <h2 class="wt-page-title mx-auto">
+        <?= $record->fullName() ?>
+    </h2>
+    <?php if ($record->canEdit()) : ?>
+        <?= view('media-page-menu', ['clipboard_facts' => $clipboard_facts, 'record' => $record]) ?>
+    <?php endif ?>
+</div>
+
+<?php if ($contribute_url !== '') : ?>
+    <div class="text-center mb-4">
+        <a class="btn btn-sm btn-outline-primary" href="<?= e($contribute_url) ?>" rel="nofollow">
+            <?= I18N::translate('Identify people or contribute information') ?>
+        </a>
+    </div>
+<?php endif ?>
+
+<div class="wt-page-content">
+    <?= view('record-page-links', [
+        'details'              => view('media-page-details', ['clipboard_facts' => $clipboard_facts, 'record' => $record]),
+        'linked_families'      => $linked_families,
+        'linked_individuals'   => $linked_individuals,
+        'linked_locations'     => $linked_locations,
+        'linked_media_objects' => null,
+        'linked_notes'         => $linked_notes,
+        'linked_repositories'  => null,
+        'linked_sources'       => $linked_sources,
+        'linked_submitters'    => null,
+        'tree'                 => $tree,
+    ]) ?>
+</div>
+
+<?= view('modals/ajax') ?>
