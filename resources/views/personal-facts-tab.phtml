@@ -1,0 +1,131 @@
+<?php
+
+declare(strict_types=1);
+
+use Fisharebest\Webtrees\Auth;
+use Fisharebest\Webtrees\DB;
+use Fisharebest\Webtrees\Fact;
+use Fisharebest\Webtrees\Family;
+use Fisharebest\Webtrees\I18N;
+use Fisharebest\Webtrees\Individual;
+use Illuminate\Support\Collection;
+
+/**
+ * Based on webtrees 2.2.6 resources/views/modules/personal-facts/tab.phtml.
+ *
+ * Potts Family Contributions deliberately leaves the normal fact renderer alone.
+ * It adds a small contribution action inside eligible INDI/FAM fact cards.
+ *
+ * @var bool                 $can_edit
+ * @var Collection<int,Fact> $clipboard_facts
+ * @var Collection<int,Fact> $facts
+ * @var bool                 $has_associate_facts
+ * @var bool                 $has_historic_facts
+ * @var bool                 $has_relative_facts
+ * @var Individual           $individual
+ */
+
+$tree = $individual->tree();
+
+// Guests can only use the links when guest contributions are enabled.
+$allow_guests = DB::table('module_setting')
+    ->where('module_name', '=', '_potts_family_contributions_')
+    ->where('setting_name', '=', 'allow_guests')
+    ->value('setting_value') ?? '1';
+
+$can_contribute = Auth::check() || $allow_guests === '1';
+
+?>
+
+<div class="wt-tab-facts">
+    <table class="table wt-facts-table" style="table-layout: fixed">
+        <colgroup>
+            <col style="width:25%">
+            <col style="width:75%">
+        </colgroup>
+        <tbody>
+            <tr>
+                <td colspan="2">
+                    <?php if ($has_associate_facts) : ?>
+                        <label>
+                            <input id="show-associate-facts" type="checkbox" data-bs-toggle="collapse" data-bs-target=".wt-associate-fact" data-wt-persist="associates" autocomplete="off" aria-expanded="false">
+                            <?= I18N::translate('Associated events') ?>
+                        </label>
+                    <?php endif ?>
+
+                    <?php if ($has_relative_facts) : ?>
+                        <label>
+                            <input id="show-relatives-facts" type="checkbox" data-bs-toggle="collapse" data-bs-target=".wt-relation-fact" data-wt-persist="relatives" autocomplete="off" aria-expanded="false">
+                            <?= I18N::translate('Events of close relatives') ?>
+                        </label>
+                    <?php endif ?>
+
+                    <?php if ($has_historic_facts) : ?>
+                        <label>
+                            <input id="show-historical-facts" type="checkbox" data-bs-toggle="collapse" data-bs-target=".wt-historic-fact" data-wt-persist="historic-facts" autocomplete="off" aria-expanded="false">
+                            <?= I18N::translate('Historic events') ?>
+                        </label>
+                    <?php endif ?>
+                </td>
+            </tr>
+
+            <?php foreach ($facts as $fact) : ?>
+                <?php
+                $parent = $fact->record();
+                $fact_id = (string) $fact->id();
+
+                // Eligible targets are real facts stored on this individual or on one
+                // of the family records shown as part of this person's own life story.
+                // Pseudo-facts for relatives/associates/history are intentionally excluded.
+                $supported = $can_contribute
+                    && !in_array($fact_id, ['histo', 'asso'], true)
+                    && ($parent === $individual || $parent instanceof Family);
+
+                $suggest_url = '';
+                if ($supported) {
+                    try {
+                        $suggest_url = route('_potts_family_contributions_-route', ['tree' => $tree->name()])
+                            . '?suggest=1&person_xref=' . rawurlencode($individual->xref())
+                            . '&fact_record_xref=' . rawurlencode($parent->xref())
+                            . '&fact_id=' . rawurlencode($fact_id);
+                    } catch (\Throwable) {
+                        $suggest_url = '';
+                    }
+                }
+
+                // Render the normal webtrees fact first, then add our contribution action
+                // inside the fact's value cell. This preserves all theme/module fact styling
+                // and avoids creating a separate table row between every event.
+                $fact_html = view('fact', ['fact' => $fact, 'record' => $individual]);
+
+                if ($suggest_url !== '') {
+                    $action = '<div class="pfc-suggest-inline text-end mt-2">'
+                        . '<a class="small text-muted text-decoration-none" href="' . e($suggest_url) . '" rel="nofollow"'
+                        . ' title="' . e(I18N::translate('Suggest a correction to this fact')) . '">'
+                        . I18N::translate('Suggest correction')
+                        . '</a></div>';
+
+                    $last_td = strrpos($fact_html, '</td>');
+                    if ($last_td !== false) {
+                        $fact_html = substr($fact_html, 0, $last_td) . $action . substr($fact_html, $last_td);
+                    }
+                }
+                ?>
+
+                <?= $fact_html ?>
+            <?php endforeach ?>
+
+            <?php if ($facts->isEmpty()) : ?>
+                <tr>
+                    <td colspan="2">
+                        <?= I18N::translate('There are no facts for this individual.') ?>
+                    </td>
+                </tr>
+            <?php endif ?>
+
+            <?php if ($individual->canEdit()) : ?>
+                <?= view('fact-add-new', ['record' => $individual]) ?>
+            <?php endif ?>
+        </tbody>
+    </table>
+</div>
