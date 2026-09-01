@@ -1,0 +1,128 @@
+<?php
+
+declare(strict_types=1);
+
+use Fisharebest\Webtrees\Auth;
+use Fisharebest\Webtrees\DB;
+use Fisharebest\Webtrees\Fact;
+use Fisharebest\Webtrees\I18N;
+use Fisharebest\Webtrees\Individual;
+use Fisharebest\Webtrees\Media;
+use Fisharebest\Webtrees\Registry;
+use Illuminate\Support\Collection;
+
+/**
+ * Based on webtrees 2.2.6 resources/views/modules/media/tab.phtml.
+ * Adds a small identification/contribution action to media objects shown on
+ * an individual's Media tab, without replacing the normal fact renderer.
+ *
+ * @var bool                 $can_edit
+ * @var Collection<int,Fact> $clipboard_facts
+ * @var Collection<int,Fact> $facts
+ * @var Individual           $individual
+ */
+
+$tree = $individual->tree();
+$module_name = '_potts_family_contributions_';
+$allow_guests = DB::table('module_setting')
+    ->where('module_name', '=', $module_name)
+    ->where('setting_name', '=', 'allow_guests')
+    ->value('setting_value') ?? '1';
+$can_contribute = Auth::check() || $allow_guests === '1';
+
+$media_action = static function (Media $media) use ($can_contribute, $module_name, $tree, $individual): string {
+    if (!$can_contribute || !$media->canShow()) {
+        return '';
+    }
+
+    try {
+        $url = route($module_name . '-route', ['tree' => $tree->name()])
+            . '?media=1&media_xref=' . rawurlencode($media->xref())
+            . '&return_person_xref=' . rawurlencode($individual->xref());
+
+        return '<div class="pfc-media-action text-end mt-2">'
+            . '<a class="small text-muted text-decoration-none" rel="nofollow" href="' . e($url) . '"'
+            . ' title="' . e(I18N::translate('Identify people or add information about this media item')) . '">'
+            . I18N::translate('Identify people or add information')
+            . '</a></div>';
+    } catch (\Throwable) {
+        return '';
+    }
+};
+?>
+
+<div class="wt-tab-media">
+    <table class="table wt-facts-table">
+        <tr>
+            <td colspan="2">
+                <label>
+                    <input id="show-level-2-media" type="checkbox" data-bs-toggle="collapse" data-bs-target=".wt-level-two-media" data-wt-persist="level-two-media" autocomplete="off">
+                    <?= I18N::translate('Show all media') ?>
+                </label>
+            </td>
+        </tr>
+
+        <?php foreach ($facts as $fact) : ?>
+            <?php if (str_ends_with($fact->tag(), ':OBJE')) : ?>
+                <?php
+                $fact_html = view('fact', ['fact' => $fact, 'record' => $individual]);
+                $target = $fact->target();
+                if ($target instanceof Media) {
+                    $action = $media_action($target);
+                    if ($action !== '') {
+                        $last_td = strrpos($fact_html, '</td>');
+                        if ($last_td !== false) {
+                            $fact_html = substr($fact_html, 0, $last_td) . $action . substr($fact_html, $last_td);
+                        }
+                    }
+                }
+                ?>
+                <?= $fact_html ?>
+            <?php else : ?>
+                <?php
+                if ($fact->isPendingAddition()) {
+                    $styleadd = 'wt-new ';
+                } elseif ($fact->isPendingDeletion()) {
+                    $styleadd = 'wt-old ';
+                } else {
+                    $styleadd = '';
+                }
+                ?>
+
+                <tr class="wt-level-two-media collapse">
+                    <th scope="row" class="rela <?= $styleadd ?>">
+                        <?= $fact->label() ?>
+                        <?= view('fact-edit-links', ['fact' => $fact, 'url' => $fact->record()->url() . '#tab-media']) ?>
+                    </th>
+
+                    <td class="<?= $styleadd ?>">
+                        <?php if (preg_match_all('/\n([2-4] OBJE .*)/', $fact->gedcom(), $matches, PREG_SET_ORDER) > 0) : ?>
+                            <?php foreach ($matches as $match) : ?>
+                                <?= view('fact-gedcom-fields', ['gedcom' => $match[1], 'parent' => $fact->tag(), 'tree' => $fact->record()->tree()]) ?>
+                                <?php
+                                if (preg_match('/OBJE @([^@]+)@/', $match[1], $xref_match) === 1) {
+                                    try {
+                                        $media = Registry::mediaFactory()->make((string) $xref_match[1], $tree);
+                                        if ($media instanceof Media) {
+                                            echo $media_action($media);
+                                        }
+                                    } catch (\Throwable) {
+                                    }
+                                }
+                                ?>
+                            <?php endforeach ?>
+                        <?php endif ?>
+                    </td>
+                </tr>
+            <?php endif ?>
+        <?php endforeach ?>
+
+        <?php if ($facts->isEmpty()) : ?>
+            <tr>
+                <td colspan="2">
+                    <?= I18N::translate('There are no media objects for this individual.') ?>
+                </td>
+            </tr>
+        <?php endif ?>
+    </table>
+</div>
